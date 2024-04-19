@@ -1,0 +1,76 @@
+{
+  "name": "medusa-plugin-slack-notification",
+  "version": "0.0.1",
+  "description": "A starter for Medusa projects.",
+  "author": "Medusa (https://medusajs.com)",
+  "license": "MIT",
+  "keywords": [
+    "sqlite",
+    "postgres",
+    "typescript",
+    "ecommerce",
+    "headless",
+    "medusa"
+  ],
+  "scripts": {
+    "prepare": "cross-env NODE_ENV=production npm run build",
+    "test": "jest --passWithNoTests src ",
+    "build": "babel src --out-dir dist --ignore '**/__tests__','**/__mocks__' --extensions \".ts, .js \" && medusa-admin bundle",
+    "watch": "babel -w src --out-dir dist --ignore '**/__tests__','**/__mocks__' --extensions \".ts, .js \"",
+    "release": "np"
+  },
+  "dependencies": {
+    "@slack/web-api": "^7.0.2"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.23.4",
+    "@babel/core": "^7.23.6",
+    "@babel/plugin-proposal-class-properties": "^7.18.6",
+    "@babel/plugin-proposal-decorators": "^7.23.6",
+    "@babel/preset-env": "^7.23.8",
+    "@babel/preset-typescript": "^7.23.3",
+    "@medusajs/admin-ui": "^2.1.2",
+    "@medusajs/types": "^1.11.10",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^27.4.0",
+    "@types/multer": "^1.4.11",
+    "babel-preset-medusa-package": "^1.1.19",
+    "class-validator": "^0.14.0",
+    "cors": "^2.8.5",
+    "cross-env": "^7.0.3",
+    "express": "^4.18.2",
+    "jest": "^27.3.1",
+    "supertest": "^6.3.4",
+    "ts-jest": "^27.0.7",
+    "typescript": "^4.5.2"
+  },
+  "peerDependencies": {
+    "@medusajs/medusa": "1.20.4"
+  },
+  "jest": {
+    "globals": {
+      "ts-jest": {
+        "tsconfig": "tsconfig.spec.json"
+      }
+    },
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "<rootDir>/node_modules/"
+    ],
+    "rootDir": "src",
+    "testRegex": "(/__tests__/.*|\\.(test|spec))\\.(ts|js)$",
+    "transform": {
+      ".ts": "ts-jest"
+    },
+    "collectCoverageFrom": [
+      "**/*.(t|j)s"
+    ],
+    "coverageDirectory": "./coverage",
+    "testEnvironment": "node"
+  }
+}
