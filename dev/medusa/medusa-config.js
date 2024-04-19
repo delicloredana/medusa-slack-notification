@@ -76,7 +76,7 @@ const plugins = [
       //     ],
       //   }),
       // },
-      // events: ["order.placed", "order.shipment_created", "order.fulfillment_created"]
+      // events: ["order.placed", "order.shipment_created"]
     },
   },
 ];

@@ -7,6 +7,10 @@ import {
   Notification,
   FulfillmentProviderService,
   ReturnService,
+  Order,
+  Return,
+  Swap,
+  ClaimOrder,
 } from "@medusajs/medusa";
 import { WebClient } from "@slack/web-api";
 import messages from "../data/messages";
@@ -36,6 +40,7 @@ class SlackNotificationSenderService extends AbstractNotificationService {
   protected swapService: SwapService;
   protected fulfillmentProviderService: FulfillmentProviderService;
   protected options: PluginOptions;
+  protected messages
   constructor(container, options) {
     super(container);
     this.options = options;
@@ -45,6 +50,7 @@ class SlackNotificationSenderService extends AbstractNotificationService {
     this.swapService = container.swapService;
     this.fulfillmentProviderService = container.fulfillmentProviderService;
     this.client = new WebClient(this.options?.slack_api);
+    this.messages={...messages, ...options.messages}
   }
 
   async sendNotification(
@@ -224,13 +230,19 @@ class SlackNotificationSenderService extends AbstractNotificationService {
     }
     return { ...fetchedData, data };
   }
-  getFormattedMessage(event: string, data) {
-    if (this.options.messages?.[event]) {
-      return this.options.messages[event](data);
-    }
+  getFormattedMessage(
+    event: string,
+    data:
+      | Order
+      | Return
+      | Swap
+      | ClaimOrder
+      | (Order & { data: { fulfillment_id?: string; refund_id?: string } })
+  ) {
+
     const text = event.split(/[._]+/).join(" ");
-    const message = messages[event]
-      ? messages[event](data, text, this.options)
+    const message = this.messages[event]
+      ? this.messages[event](data, text, this.options)
       : {
           text: text.toUpperCase(),
           blocks: [
