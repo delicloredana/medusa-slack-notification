@@ -1,5 +1,5 @@
 import { ClaimOrder, Order, Return, ReturnItem, Swap } from "@medusajs/medusa";
-import { PluginOptions } from "src/services/slack-notification-sender";
+import { PluginOptions } from "../services/slack-notification-sender";
 
 const messages = {
   "order.placed": (data: Order, text: string, options: PluginOptions) => {
