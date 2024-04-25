@@ -73,6 +73,13 @@ const plugins = [
       //           text: `*KREIRANA NARUDZBA* *<http://localhost:9000/app/a/orders/${data.id}|#${data.display_id}>*`,
       //         },
       //       },
+      //       {
+      //         type:"divider"
+      //       },
+      //       ...data.items.map(item=>({type: "section", text: {
+      //         type:"mrkdwn",
+      //         text:`${item.variant.product.title}`
+      //       }}))
       //     ],
       //   }),
       // },

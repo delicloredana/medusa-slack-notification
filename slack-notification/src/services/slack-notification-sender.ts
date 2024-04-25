@@ -11,10 +11,15 @@ import {
   Return,
   Swap,
   ClaimOrder,
+  NotificationService,
+  EventBusService,
 } from "@medusajs/medusa";
 import { WebClient } from "@slack/web-api";
 import messages from "../data/messages";
-
+import SlackNotificationEventRepository from "../repositories/slack-notification-event";
+import loader from "../loaders/slack-notification-sender";
+import { MedusaContainer } from "@medusajs/types";
+import { SlackNotificationEvent } from "../models/slack-notification-event";
 export type PluginOptions = {
   backend_url: string;
   channel: string;
@@ -35,22 +40,30 @@ class SlackNotificationSenderService extends AbstractNotificationService {
 
   protected client: WebClient;
   protected orderService: OrderService;
+
+  protected notificationService: NotificationService;
+  protected eventBusService: EventBusService;
   protected returnService: ReturnService;
   protected claimService: ClaimService;
   protected swapService: SwapService;
   protected fulfillmentProviderService: FulfillmentProviderService;
   protected options: PluginOptions;
-  protected messages
+  protected slackNotificationEventRepository: typeof SlackNotificationEventRepository;
+  protected messages;
   constructor(container, options) {
     super(container);
     this.options = options;
     this.orderService = container.orderService;
+    this.notificationService = container.notificationService;
     this.returnService = container.returnService;
     this.claimService = container.claimService;
     this.swapService = container.swapService;
+    this.eventBusService = container.eventBusService;
     this.fulfillmentProviderService = container.fulfillmentProviderService;
     this.client = new WebClient(this.options?.slack_api);
-    this.messages={...messages, ...options.messages}
+    this.messages = { ...messages, ...options.messages };
+    this.slackNotificationEventRepository =
+      container.slackNotificationEventRepository;
   }
 
   async sendNotification(
@@ -58,8 +71,10 @@ class SlackNotificationSenderService extends AbstractNotificationService {
     data: SlackNotificationSenderData,
     attachmentGenerator: unknown
   ): Promise<ReturnedData> {
+    console.log(data);
     const fetchedData = await this.fetchData(event, data);
     const formattedMessage = this.getFormattedMessage(event, fetchedData);
+    console.log(formattedMessage);
     const slackMessage = await this.client.chat.postMessage({
       channel: this.options.channel,
       ...formattedMessage,
@@ -239,7 +254,6 @@ class SlackNotificationSenderService extends AbstractNotificationService {
       | ClaimOrder
       | (Order & { data: { fulfillment_id?: string; refund_id?: string } })
   ) {
-
     const text = event.split(/[._]+/).join(" ");
     const message = this.messages[event]
       ? this.messages[event](data, text, this.options)
@@ -260,6 +274,34 @@ class SlackNotificationSenderService extends AbstractNotificationService {
         };
 
     return message;
+  }
+  async retrieveEvents() {
+    const slackRepo = this.manager_.withRepository(
+      this.slackNotificationEventRepository
+    );
+    const events = await slackRepo.find();
+    return events;
+  }
+  async postEvent(event) {
+    const slackRepo = this.manager_.withRepository(
+      this.slackNotificationEventRepository
+    );
+    const newEvent = slackRepo.create(event);
+
+    const postedEvent = await slackRepo.save(newEvent) as unknown as SlackNotificationEvent;
+    console.log(postedEvent);
+    this.notificationService.subscribe(postedEvent.event_name, "slack-notification-sender")
+    // this.eventBusService.emit(`slack.event.added`, { event :  postedEvent.event_name});
+    return postedEvent;
+  }
+
+  async deleteEvent(eventId: string) {
+    const slackRepo = this.manager_.withRepository(
+      this.slackNotificationEventRepository
+    );
+    const event = await slackRepo.findOne({ where: { id: eventId } });
+    const deleted = await slackRepo.delete(eventId);
+    return deleted;
   }
 }
 
