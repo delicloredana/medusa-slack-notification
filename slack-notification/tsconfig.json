@@ -10,12 +10,13 @@
     "rootDir": "./src",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "noEmit": false,
+    "noEmit": true,
     "strict": false,
     "moduleResolution": "node",
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true
   },
   "include": ["src/"],
   "exclude": ["build", ".cache", "tests", "node_modules", ".eslintrc.js"]

@@ -62,28 +62,6 @@ const plugins = [
       slack_api: process.env.SLACK_API,
       backend_url: process.env.BACKEND_URL,
       channel: process.env.CHANNEL,
-      // messages: {
-      //   "order.placed": (data) => ({
-      //     text: "Order placed",
-      //     blocks: [
-      //       {
-      //         type: "section",
-      //         text: {
-      //           type: "mrkdwn",
-      //           text: `*KREIRANA NARUDZBA* *<http://localhost:9000/app/a/orders/${data.id}|#${data.display_id}>*`,
-      //         },
-      //       },
-      //       {
-      //         type:"divider"
-      //       },
-      //       ...data.items.map(item=>({type: "section", text: {
-      //         type:"mrkdwn",
-      //         text:`${item.variant.product.title}`
-      //       }}))
-      //     ],
-      //   }),
-      // },
-      // events: ["order.placed", "order.shipment_created"]
     },
   },
 ];

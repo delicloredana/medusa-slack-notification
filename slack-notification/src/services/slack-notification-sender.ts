@@ -1,80 +1,74 @@
 import {
   AbstractNotificationService,
-  ClaimService,
-  OrderService,
-  SwapService,
   ReturnedData,
   Notification,
-  FulfillmentProviderService,
-  ReturnService,
-  Order,
-  Return,
-  Swap,
-  ClaimOrder,
-  NotificationService,
-  EventBusService,
 } from "@medusajs/medusa";
 import { WebClient } from "@slack/web-api";
-import messages from "../data/messages";
-import SlackNotificationEventRepository from "../repositories/slack-notification-event";
-import loader from "../loaders/slack-notification-sender";
-import { MedusaContainer } from "@medusajs/types";
-import { SlackNotificationEvent } from "../models/slack-notification-event";
+import { TemplateRes } from "../types";
+import { readdir } from "fs/promises";
+import path from "path";
+
 export type PluginOptions = {
   backend_url: string;
   channel: string;
   slack_api: string;
-  events?: string[];
-  messages?: Record<string, Function>;
 };
 
-export type SlackNotificationSenderData = {
+export type SlackNotificationData = {
+  templateFileName: string;
+  originalEventName: string;
   id: string;
-  return_id?: string;
-  fulfillment_id?: string;
-  refund_id?: string;
+  preparedData: Record<string, unknown>;
 };
 
-class SlackNotificationSenderService extends AbstractNotificationService {
-  static identifier = "slack-notification-sender";
-
+class SlackNotificationService extends AbstractNotificationService {
+  static identifier = "slack-notification";
   protected client: WebClient;
-  protected orderService: OrderService;
-
-  protected notificationService: NotificationService;
-  protected eventBusService: EventBusService;
-  protected returnService: ReturnService;
-  protected claimService: ClaimService;
-  protected swapService: SwapService;
-  protected fulfillmentProviderService: FulfillmentProviderService;
   protected options: PluginOptions;
-  protected slackNotificationEventRepository: typeof SlackNotificationEventRepository;
-  protected messages;
+  private templates: Record<
+    string,
+    (eventName: string, preparedData: Record<string, unknown>) => TemplateRes
+  >;
+
   constructor(container, options) {
     super(container);
     this.options = options;
-    this.orderService = container.orderService;
-    this.notificationService = container.notificationService;
-    this.returnService = container.returnService;
-    this.claimService = container.claimService;
-    this.swapService = container.swapService;
-    this.eventBusService = container.eventBusService;
-    this.fulfillmentProviderService = container.fulfillmentProviderService;
     this.client = new WebClient(this.options?.slack_api);
-    this.messages = { ...messages, ...options.messages };
-    this.slackNotificationEventRepository =
-      container.slackNotificationEventRepository;
   }
 
+  async loadTemplates() {
+    const rootDir = path.resolve(".");
+    const templatesPath = path.join(
+      rootDir,
+      "../../slack-notification/dist/templates"
+    );
+    const files = await readdir(templatesPath);
+    const templatesArray = await Promise.all(
+      files.map(async (file) => {
+        const module = await import(
+          `/Users/agilo/Desktop/plugins/test/slack-notification/dist/templates/${
+            file.split(".")[0]
+          }`
+        );
+
+        return {
+          [file.split(".")[0]]: module.default,
+        };
+      })
+    );
+    this.templates = Object.assign({}, ...templatesArray);
+  }
   async sendNotification(
     event: string,
-    data: SlackNotificationSenderData,
-    attachmentGenerator: unknown
+    data: SlackNotificationData
   ): Promise<ReturnedData> {
-    console.log(data);
-    const fetchedData = await this.fetchData(event, data);
-    const formattedMessage = this.getFormattedMessage(event, fetchedData);
-    console.log(formattedMessage);
+    if (!this.templates) {
+      await this.loadTemplates();
+    }
+    const formattedMessage = this.templates[data.templateFileName](
+      data.originalEventName,
+      data.preparedData
+    ).message;
     const slackMessage = await this.client.chat.postMessage({
       channel: this.options.channel,
       ...formattedMessage,
@@ -82,7 +76,7 @@ class SlackNotificationSenderService extends AbstractNotificationService {
     return {
       to: "slack",
       status: slackMessage.ok ? "sent" : "failed",
-      data: formattedMessage,
+      data: formattedMessage as unknown as Record<string, unknown>,
     };
   }
   async resendNotification(
@@ -101,208 +95,6 @@ class SlackNotificationSenderService extends AbstractNotificationService {
       data: notification.data,
     };
   }
-
-  // async fetchAttachment(event: string, data, attachmentGenerator) {
-  //   switch (event) {
-  //     case "swap.created":
-  //     case "order.return_requested": {
-  //       let attachments = [];
-  //       const returnOrder =
-  //         event === "order.return_requested" ? data : data.return_order;
-  //       const { shipping_method, shipping_data } = returnOrder;
-  //       if (shipping_method) {
-  //         const provider = shipping_method.shipping_option.provider_id;
-  //         const lbl = await this.fulfillmentProviderService.retrieveDocuments(
-  //           provider,
-  //           shipping_data,
-  //           "label"
-  //         );
-  //         attachments = attachments.concat(
-  //           lbl.map((d) => ({
-  //             name: "return-label",
-  //             base64: d.base_64,
-  //             type: d.type,
-  //           }))
-  //         );
-  //       }
-
-  //       if (attachmentGenerator && attachmentGenerator.createReturnInvoice) {
-  //         const base64 = await attachmentGenerator.createReturnInvoice(
-  //           data.order,
-  //           data.return_request.items
-  //         );
-  //         attachments.push({
-  //           name: "invoice",
-  //           base64,
-  //           type: "application/pdf",
-  //         });
-  //       }
-
-  //       return attachments;
-  //     }
-  //     default:
-  //       return [];
-  //   }
-  // }
-
-  async fetchData(event: string, data: SlackNotificationSenderData) {
-    const eventType = event.split(".")[0];
-    let fetchedData;
-
-    switch (eventType) {
-      case "order":
-        switch (event) {
-          case "order.placed":
-          case "order.canceled":
-          case "order.shipment_created":
-          case "order.refund_created":
-          case "order.refund_failed":
-            fetchedData = await this.orderService.retrieve(data.id, {
-              select: [
-                "shipping_total",
-                "discount_total",
-                "tax_total",
-                "subtotal",
-                "total",
-                "refunded_total",
-                "paid_total",
-              ],
-              relations: [
-                "customer",
-                "billing_address",
-                "shipping_address",
-                "discounts",
-                "discounts.rule",
-                "shipping_methods",
-                "payments",
-                "items",
-                "fulfillments",
-              ],
-            });
-            break;
-          case "order.return_requested":
-          case "order.items_returned":
-          case "order.return_action_required":
-            fetchedData = await this.returnService.retrieve(data.return_id, {
-              relations: [
-                "order",
-                "items",
-                "order",
-                "items.item",
-                "items.item.variant",
-                "items.item.variant.product",
-                "shipping_method",
-                "shipping_method.shipping_option",
-              ],
-            });
-            break;
-        }
-
-        break;
-      case "claim":
-        fetchedData = await this.claimService.retrieve(data.id, {
-          select: ["id", "order_id", "refund_amount", "type"],
-          relations: [
-            "claim_items",
-            "claim_items.variant",
-            "claim_items.variant.product",
-            "additional_items",
-            "additional_items.variant",
-            "return_order",
-            "return_order.items",
-            "return_order.shipping_method",
-            "return_order.shipping_method.shipping_option",
-            "fulfillments",
-            "order",
-          ],
-        });
-        break;
-      case "swap":
-        fetchedData = await this.swapService.retrieve(data.id, {
-          select: [
-            "order.display_id",
-            "order.currency_code",
-            "id",
-            "difference_due",
-            "cart.total",
-            "order_id",
-          ],
-          relations: [
-            "additional_items",
-            "order",
-            "return_order",
-            "return_order.items",
-            "return_order.items.item",
-            "return_order.items.item.variant",
-            "additional_items.variant",
-            "return_order.shipping_method",
-            "return_order.shipping_method.shipping_option",
-            "fulfillments",
-            "cart",
-          ],
-        });
-        break;
-    }
-    return { ...fetchedData, data };
-  }
-  getFormattedMessage(
-    event: string,
-    data:
-      | Order
-      | Return
-      | Swap
-      | ClaimOrder
-      | (Order & { data: { fulfillment_id?: string; refund_id?: string } })
-  ) {
-    const text = event.split(/[._]+/).join(" ");
-    const message = this.messages[event]
-      ? this.messages[event](data, text, this.options)
-      : {
-          text: text.toUpperCase(),
-          blocks: [
-            {
-              type: "section",
-              text: {
-                type: "mrkdwn",
-                text: `${text.toUpperCase()}`,
-              },
-            },
-            {
-              type: "divider",
-            },
-          ],
-        };
-
-    return message;
-  }
-  async retrieveEvents() {
-    const slackRepo = this.manager_.withRepository(
-      this.slackNotificationEventRepository
-    );
-    const events = await slackRepo.find();
-    return events;
-  }
-  async postEvent(event) {
-    const slackRepo = this.manager_.withRepository(
-      this.slackNotificationEventRepository
-    );
-    const newEvent = slackRepo.create(event);
-
-    const postedEvent = await slackRepo.save(newEvent) as unknown as SlackNotificationEvent;
-    console.log(postedEvent);
-    this.notificationService.subscribe(postedEvent.event_name, "slack-notification-sender")
-    // this.eventBusService.emit(`slack.event.added`, { event :  postedEvent.event_name});
-    return postedEvent;
-  }
-
-  async deleteEvent(eventId: string) {
-    const slackRepo = this.manager_.withRepository(
-      this.slackNotificationEventRepository
-    );
-    const event = await slackRepo.findOne({ where: { id: eventId } });
-    const deleted = await slackRepo.delete(eventId);
-    return deleted;
-  }
 }
 
-export default SlackNotificationSenderService;
+export default SlackNotificationService;
