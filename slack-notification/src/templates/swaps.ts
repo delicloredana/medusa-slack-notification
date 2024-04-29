@@ -1,19 +1,22 @@
-import {
-  ReturnItem,
-  SwapService,
-} from "@medusajs/medusa";
+import { ReturnItem, SwapService } from "@medusajs/medusa";
 import { MedusaContainer } from "@medusajs/types";
 import { TemplateRes } from "../types";
+import { PluginOptions } from "../services/slack-notification-sender";
 
 export const EVENTS = [SwapService.Events.CREATED];
+
+/**
+ * https://docs.medusajs.com/development/events/events-list#swap-events
+ */
 export interface EventData {
-    id: string;
-    no_notification?: boolean;
-  }
+  id: string;
+  no_notification?: boolean;
+}
+
 export async function prepareTemplateData(
   eventName: string,
   { id, no_notification }: EventData,
-  container: MedusaContainer,
+  container: MedusaContainer
 ) {
   if (no_notification) {
     return;
@@ -49,7 +52,8 @@ export async function prepareTemplateData(
 }
 export default function templateData(
   eventName: string,
-  data: Awaited<ReturnType<typeof prepareTemplateData>>
+  data: Awaited<ReturnType<typeof prepareTemplateData>>,
+  options: PluginOptions
 ): TemplateRes {
   const blocks: any[] = [];
   blocks.push({
@@ -67,13 +71,7 @@ export default function templateData(
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `*<${"http://localhost:9000/app/a"}/products/${
-          item.item.variant.product_id
-        }|#${item.item.title}>*\n Description: \t${
-          item.item.description
-        }\n Requested quantity: \t${
-          item.requested_quantity
-        } \n Received quantity: \t${item.received_quantity}`,
+        text: `*<${options.backend_url}/products/${item.item.variant.product_id}|#${item.item.title}>*\n Description: \t${item.item.description}\n Requested quantity: \t${item.requested_quantity} \n Received quantity: \t${item.received_quantity}`,
       },
       accessory: {
         type: "image",
@@ -112,13 +110,7 @@ export default function templateData(
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `*<${"http://localhost:9000/app/a"}/products/${
-          item.variant.product_id
-        }|#${item.title}>*\n Description: \t${
-          item.description
-        }\n Requested quantity: \t${item.quantity} \n Received quantity: \t${
-          item.fulfilled_quantity
-        }`,
+        text: `*<${options.backend_url}/products/${item.variant.product_id}|#${item.title}>*\n Description: \t${item.description}\n Requested quantity: \t${item.quantity} \n Received quantity: \t${item.fulfilled_quantity}`,
       },
       accessory: {
         type: "image",
@@ -165,7 +157,7 @@ export default function templateData(
           type: "section",
           text: {
             type: "mrkdwn",
-            text: `${eventName.toUpperCase()} *<${"http://localhost:9000/app/a"}/orders/${
+            text: `${eventName.toUpperCase()} *<${options.backend_url}/orders/${
               data.order_id
             }|#${data.order.display_id}>*`,
           },

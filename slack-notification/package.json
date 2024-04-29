@@ -15,7 +15,7 @@
   "scripts": {
     "prepare": "cross-env NODE_ENV=production npm run build",
     "test": "jest --passWithNoTests src ",
-    "build": "babel src --out-dir dist --ignore '**/__tests__','**/__mocks__' --extensions \".ts, .js \" && medusa-admin bundle",
+    "build": "babel src --out-dir dist --ignore '**/__tests__','**/__mocks__' --extensions \".ts, .js \"",
     "watch": "babel -w src --out-dir dist --ignore '**/__tests__','**/__mocks__' --extensions \".ts, .js \"",
     "release": "np"
   },
@@ -45,13 +45,7 @@
     "typescript": "^4.5.2"
   },
   "peerDependencies": {
-    "@medusajs/medusa": "1.20.4",
-    "@medusajs/admin": "7.1.12",
-    "@medusajs/ui": "2.4.3",
-    "medusa-interfaces": "1.3.8",
-    "react": "18.2.0",
-    "react-router-dom": "6.21.2",
-    "typeorm": "0.3.16"
+    "@medusajs/medusa": "1.20.4"
   },
   "jest": {
     "globals": {

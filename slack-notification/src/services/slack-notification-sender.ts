@@ -27,7 +27,11 @@ class SlackNotificationService extends AbstractNotificationService {
   protected options: PluginOptions;
   private templates: Record<
     string,
-    (eventName: string, preparedData: Record<string, unknown>) => TemplateRes
+    (
+      eventName: string,
+      preparedData: Record<string, unknown>,
+      options: PluginOptions
+    ) => TemplateRes
   >;
 
   constructor(container, options) {
@@ -45,14 +49,13 @@ class SlackNotificationService extends AbstractNotificationService {
     const files = await readdir(templatesPath);
     const templatesArray = await Promise.all(
       files.map(async (file) => {
-        const module = await import(
-          `/Users/agilo/Desktop/plugins/test/slack-notification/dist/templates/${
-            file.split(".")[0]
-          }`
+        const [fileName] = file.split(".");
+        const templateData = await import(
+          `/Users/agilo/Desktop/plugins/test/slack-notification/dist/templates/${fileName}`
         );
 
         return {
-          [file.split(".")[0]]: module.default,
+          [fileName]: templateData.default,
         };
       })
     );
@@ -67,7 +70,8 @@ class SlackNotificationService extends AbstractNotificationService {
     }
     const formattedMessage = this.templates[data.templateFileName](
       data.originalEventName,
-      data.preparedData
+      data.preparedData,
+      this.options
     ).message;
     const slackMessage = await this.client.chat.postMessage({
       channel: this.options.channel,

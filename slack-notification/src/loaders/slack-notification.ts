@@ -17,14 +17,20 @@ type SubscriberModule<T> = {
 };
 export default async (
   container: MedusaContainer,
-  config: ConfigModule
+  configModule: ConfigModule
 ): Promise<void> => {
   const notificationService = container.resolve<NotificationService>(
     "notificationService"
   );
   const eventBusService = container.resolve<EventBusService>("eventBusService");
 
-  const subscriberDescriptors_: Map<string, SubscriberModule<any>> = new Map();
+  const excludes: RegExp[] = [
+    /\.DS_Store/,
+    /(\.ts\.map|\.js\.map|\.d\.ts)/,
+    /^_[^/\\]*(\.[^/\\]+)?$/,
+  ];
+
+  const subscriberDescriptors: Map<string, SubscriberModule<any>> = new Map();
 
   notificationService.subscribe("slack-notification", "slack-notification");
 
@@ -34,9 +40,10 @@ export default async (
     "../../slack-notification/dist/templates"
   );
   await createMap(templatesPath);
-
-  const map = subscriberDescriptors_;
-  for (const [fileName, { config, handler }] of map.entries()) {
+  for (const [
+    fileName,
+    { config, handler },
+  ] of subscriberDescriptors.entries()) {
     createSubscriber({
       fileName,
       config,
@@ -61,7 +68,7 @@ export default async (
         eventName,
         data,
         container: container,
-        pluginOptions: config,
+        pluginOptions: configModule,
       });
     };
 
@@ -77,34 +84,44 @@ export default async (
   async function createMap(dirPath: string) {
     await Promise.all(
       await readdir(dirPath, { withFileTypes: true }).then(async (entries) => {
-        return entries.map(async (entry) => {
-          const fullPath = path.join(dirPath, entry.name);
-          return await createDescriptor(fullPath, entry.name);
-        });
+        return entries
+          .filter((entry) => {
+            if (
+              excludes.length &&
+              excludes.some((exclude) => exclude.test(entry.name))
+            ) {
+              return false;
+            }
+
+            return true;
+          })
+          .map(async (entry) => {
+            const fullPath = path.join(dirPath, entry.name);
+            return await createDescriptor(fullPath, entry.name);
+          });
       })
     );
   }
   async function createDescriptor(absolutePath: string, entry: string) {
-    return await import(`${templatesPath}/${entry.split(".")[0]}`).then(
-      (module_) => {
-        subscriberDescriptors_.set(absolutePath, {
+    const [templateFileName] = entry.split(".");
+    return await import(`${templatesPath}/${templateFileName}`).then(
+      (module) => {
+        subscriberDescriptors.set(absolutePath, {
           config: {
-            event: module_.EVENTS,
+            event: module.EVENTS,
             context: {
-              subscriberId: `slack-notification-subscriber-${
-                entry.split(".")[0]
-              }`,
+              subscriberId: `slack-notification-subscriber-${templateFileName}`,
             },
           },
           handler: async ({ data, eventName, container, pluginOptions }) => {
-            const preparedData = await module_.prepareTemplateData(
+            const preparedData = await module.prepareTemplateData(
               eventName,
               data,
               container,
               pluginOptions
             );
             eventBusService.emit("slack-notification", {
-              templateFileName: entry.split(".")[0],
+              templateFileName: templateFileName,
               originalEventName: eventName,
               id: preparedData.id,
               preparedData,
@@ -115,24 +132,4 @@ export default async (
       }
     );
   }
-
-  /**
-   * const subscriberId = `slack-notification-subscriber-${templateFileName}`
-
-    for (const e of templateFile.EVENTS) {
-      eventBusService.subscribe(e, subscriber as Subscriber<unknown>, {
-        ...(config.context ?? {}),
-        subscriberId,
-      })
-    }
-   */
-
-  // () => {
-  //   const preparedData = templateFile.prepareTemplateData(templateFileName, originalEventName, preparedData)
-  //  eventBusService.emit("slack-notification", {
-  //    templateFileName,
-  //    originalEventName,
-  //    preparedData,
-  //  })
-  // }
 };
