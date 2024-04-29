@@ -51,7 +51,7 @@ class SlackNotificationService extends AbstractNotificationService {
       files.map(async (file) => {
         const [fileName] = file.split(".");
         const templateData = await import(
-          `/Users/agilo/Desktop/plugins/test/slack-notification/dist/templates/${fileName}`
+          `${templatesPath}/${fileName}`
         );
 
         return {
