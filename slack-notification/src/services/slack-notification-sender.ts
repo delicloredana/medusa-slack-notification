@@ -50,9 +50,7 @@ class SlackNotificationService extends AbstractNotificationService {
     const templatesArray = await Promise.all(
       files.map(async (file) => {
         const [fileName] = file.split(".");
-        const templateData = await import(
-          `${templatesPath}/${fileName}`
-        );
+        const templateData = await import(`${templatesPath}/${fileName}`);
 
         return {
           [fileName]: templateData.default,
@@ -78,7 +76,7 @@ class SlackNotificationService extends AbstractNotificationService {
       ...formattedMessage,
     });
     return {
-      to: "slack",
+      to: `slack:#${this.options.channel}`,
       status: slackMessage.ok ? "sent" : "failed",
       data: formattedMessage as unknown as Record<string, unknown>,
     };
@@ -94,7 +92,7 @@ class SlackNotificationService extends AbstractNotificationService {
       attachments: [],
     });
     return {
-      to: "slack",
+      to: `slack:#${this.options.channel}`,
       status: slackMessage.ok ? "sent" : "failed",
       data: notification.data,
     };
