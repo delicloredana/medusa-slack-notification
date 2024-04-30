@@ -1,4 +1,11 @@
-import { Order, OrderService, ReturnService } from "@medusajs/medusa";
+import {
+  Fulfillment,
+  Order,
+  OrderService,
+  Refund,
+  Return,
+  ReturnService,
+} from "@medusajs/medusa";
 import { MedusaContainer } from "@medusajs/types";
 import { TemplateRes } from "../types";
 import { PluginOptions } from "../services/slack-notification-sender";
@@ -97,14 +104,11 @@ export default function templateData(
   data: Awaited<ReturnType<typeof prepareTemplateData>>,
   options: PluginOptions
 ): TemplateRes {
-  if ("display_id" in data) {
-    if (
-      (eventName === "order.refund_created" ||
-        eventName === "order.refund_failed") &&
-      "refund" in data
-    ) {
-      const blocks: (KnownBlock | Block)[] = [];
-
+  const blocks: (KnownBlock | Block)[] = [];
+  switch (eventName) {
+    case "order.refund_created":
+    case "order.refund_failed":
+      const refundData = data as Order & { refund: Refund };
       blocks.push({
         type: "context",
         elements: [
@@ -112,10 +116,12 @@ export default function templateData(
             type: "mrkdwn",
             text: ` Refund amount: \t${new Intl.NumberFormat("en-US", {
               style: "currency",
-              currency: data.currency_code.toUpperCase(),
-            }).format(+(data.refund.amount / 100).toFixed(2))} \n Reason : \t${
-              data.refund.reason
-            } ${data.refund.note && ` \n Note : \t${data.refund.note}`}`,
+              currency: refundData.currency_code.toUpperCase(),
+            }).format(
+              +(refundData.refund.amount / 100).toFixed(2)
+            )} \n Reason : \t${refundData.refund.reason} ${
+              refundData.refund.note && ` \n Note : \t${refundData.refund.note}`
+            }`,
           },
         ],
       });
@@ -130,7 +136,7 @@ export default function templateData(
                 type: "mrkdwn",
                 text: `${eventName.toUpperCase()} *<${
                   options.backend_url || "http://localhost:9000/app/a"
-                }/orders/${data.id}|#${data.display_id}>*`,
+                }/orders/${data.id}|#${refundData.display_id}>*`,
               },
             },
             ...blocks,
@@ -141,13 +147,11 @@ export default function templateData(
         },
         id: data.id,
       };
-    } else if (
-      eventName === "order.shipment_created" &&
-      "fulfillment" in data
-    ) {
-      const blocks: (KnownBlock | Block)[] = [];
-
-      const itemIds = data.fulfillment.items.map((item) => item.item_id);
+    case "order.shipment_created":
+      const fulfillmentData = data as Order & { fulfillment: Fulfillment };
+      const itemIds = fulfillmentData.fulfillment.items.map(
+        (item) => item.item_id
+      );
       data.items.forEach((item) => {
         if (itemIds.includes(item.id)) {
           blocks.push({
@@ -162,7 +166,7 @@ export default function templateData(
                 item.quantity
               } \n Total: \t${new Intl.NumberFormat("en-US", {
                 style: "currency",
-                currency: data.currency_code.toUpperCase(),
+                currency: fulfillmentData.currency_code.toUpperCase(),
               }).format(+(item.total / 100).toFixed(2))}`,
             },
             accessory: {
@@ -183,7 +187,9 @@ export default function templateData(
                 type: "mrkdwn",
                 text: `${eventName.toUpperCase()} *<${
                   options.backend_url || "http://localhost:9000/app/a"
-                }/orders/${data.id}|#${data.display_id}>*`,
+                }/orders/${fulfillmentData.id}|#${
+                  fulfillmentData.display_id
+                }>*`,
               },
             },
             {
@@ -200,23 +206,23 @@ export default function templateData(
                   type: "mrkdwn",
                   text: `Subotal: \t ${new Intl.NumberFormat("en-US", {
                     style: "currency",
-                    currency: data.currency_code.toUpperCase(),
+                    currency: fulfillmentData.currency_code.toUpperCase(),
                   }).format(
-                    +(data.subtotal / 100).toFixed(2)
+                    +(fulfillmentData.subtotal / 100).toFixed(2)
                   )} \n Shipping: \t ${new Intl.NumberFormat("en-US", {
                     style: "currency",
-                    currency: data.currency_code.toUpperCase(),
+                    currency: fulfillmentData.currency_code.toUpperCase(),
                   }).format(
-                    +(data.shipping_total / 100).toFixed(2)
+                    +(fulfillmentData.shipping_total / 100).toFixed(2)
                   )}\n Discount: \t ${new Intl.NumberFormat("en-US", {
                     style: "currency",
-                    currency: data.currency_code.toUpperCase(),
+                    currency: fulfillmentData.currency_code.toUpperCase(),
                   }).format(
-                    +(data.discount_total / 100).toFixed(2)
+                    +(fulfillmentData.discount_total / 100).toFixed(2)
                   )}\n Total: \t ${new Intl.NumberFormat("en-US", {
                     style: "currency",
-                    currency: data.currency_code.toUpperCase(),
-                  }).format(+(data.total / 100).toFixed(2))}`,
+                    currency: fulfillmentData.currency_code.toUpperCase(),
+                  }).format(+(fulfillmentData.total / 100).toFixed(2))}`,
                 },
               ],
             },
@@ -225,143 +231,147 @@ export default function templateData(
             },
           ],
         },
-        id: data.id,
+        id: fulfillmentData.id,
       };
-    }
-    const blocks: (KnownBlock | Block)[] = [];
-    data.items.forEach((item) => {
-      blocks.push({
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `*<${options.backend_url}/products/${
-            item.variant.product_id
-          }|#${item.title}>*\n Description: \t${
-            item.description
-          }\n Quantity: \t${item.quantity} \n Total: \t${new Intl.NumberFormat(
-            "en-US",
-            {
+    case "order.placed":
+    case "order.canceled":
+      const orderData = data as Order;
+      orderData.items.forEach((item) => {
+        blocks.push({
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `*<${options.backend_url}/products/${
+              item.variant.product_id
+            }|#${item.title}>*\n Description: \t${
+              item.description
+            }\n Quantity: \t${
+              item.quantity
+            } \n Total: \t${new Intl.NumberFormat("en-US", {
               style: "currency",
-              currency: data.currency_code.toUpperCase(),
-            }
-          ).format(+(item.total / 100).toFixed(2))}`,
-        },
-        accessory: {
-          type: "image",
-          image_url: `${item.thumbnail}`,
-          alt_text: "Product image",
-        },
+              currency: orderData.currency_code.toUpperCase(),
+            }).format(+(item.total / 100).toFixed(2))}`,
+          },
+          accessory: {
+            type: "image",
+            image_url: `${item.thumbnail}`,
+            alt_text: "Product image",
+          },
+        });
       });
-    });
-    return {
-      id: data.id,
-      message: {
-        text: eventName,
-        blocks: [
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: `${eventName.toUpperCase()} *<${
-                options.backend_url
-              }/orders/${data.id}|#${data.display_id}>*`,
-            },
-          },
-          {
-            type: "divider",
-          },
-          ...blocks,
-          {
-            type: "divider",
-          },
-          {
-            type: "context",
-            elements: [
-              {
+      return {
+        id: orderData.id,
+        message: {
+          text: eventName,
+          blocks: [
+            {
+              type: "section",
+              text: {
                 type: "mrkdwn",
-                text: `Subotal: \t ${new Intl.NumberFormat("en-US", {
-                  style: "currency",
-                  currency: data.currency_code.toUpperCase(),
-                }).format(
-                  +(data.subtotal / 100).toFixed(2)
-                )} \n Shipping: \t ${new Intl.NumberFormat("en-US", {
-                  style: "currency",
-                  currency: data.currency_code.toUpperCase(),
-                }).format(
-                  +(data.shipping_total / 100).toFixed(2)
-                )}\n Discount: \t ${new Intl.NumberFormat("en-US", {
-                  style: "currency",
-                  currency: data.currency_code.toUpperCase(),
-                }).format(
-                  +(data.discount_total / 100).toFixed(2)
-                )}\n Total: \t ${new Intl.NumberFormat("en-US", {
-                  style: "currency",
-                  currency: data.currency_code.toUpperCase(),
-                }).format(+(data.total / 100).toFixed(2))}`,
+                text: `${eventName.toUpperCase()} *<${
+                  options.backend_url
+                }/orders/${orderData.id}|#${orderData.display_id}>*`,
               },
-            ],
+            },
+            {
+              type: "divider",
+            },
+            ...blocks,
+            {
+              type: "divider",
+            },
+            {
+              type: "context",
+              elements: [
+                {
+                  type: "mrkdwn",
+                  text: `Subotal: \t ${new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: orderData.currency_code.toUpperCase(),
+                  }).format(
+                    +(orderData.subtotal / 100).toFixed(2)
+                  )} \n Shipping: \t ${new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: orderData.currency_code.toUpperCase(),
+                  }).format(
+                    +(orderData.shipping_total / 100).toFixed(2)
+                  )}\n Discount: \t ${new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: orderData.currency_code.toUpperCase(),
+                  }).format(
+                    +(orderData.discount_total / 100).toFixed(2)
+                  )}\n Total: \t ${new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: orderData.currency_code.toUpperCase(),
+                  }).format(+(orderData.total / 100).toFixed(2))}`,
+                },
+              ],
+            },
+            {
+              type: "divider",
+            },
+          ],
+        },
+      };
+    case "order.return_requested":
+    case "order.items_returned":
+    case "order.return_action_required":
+      const returnedData = data as Return;
+      returnedData.items.forEach((i) => {
+        blocks.push({
+          type: "divider",
+        });
+        blocks.push({
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `*<${options.backend_url}/products/${i.item.variant.product_id}|#${i.item.variant.product.title}>*\n Description: \t${i.item.description}\n Requested quantity: \t${i.requested_quantity} \n Received quantity: \t${i.received_quantity}`,
           },
-          {
-            type: "divider",
+          accessory: {
+            type: "image",
+            image_url: `${i.item.thumbnail}`,
+            alt_text: "Product image",
           },
-        ],
-      },
-    };
-  } else {
-    const blocks: (KnownBlock | Block)[] = [];
-    data.items.forEach((i) => {
+        });
+      });
       blocks.push({
         type: "divider",
       });
       blocks.push({
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `*<${options.backend_url}/products/${i.item.variant.product_id}|#${i.item.variant.product.title}>*\n Description: \t${i.item.description}\n Requested quantity: \t${i.requested_quantity} \n Received quantity: \t${i.received_quantity}`,
-        },
-        accessory: {
-          type: "image",
-          image_url: `${i.item.thumbnail}`,
-          alt_text: "Product image",
-        },
-      });
-    });
-    blocks.push({
-      type: "divider",
-    });
-    blocks.push({
-      type: "context",
-      elements: [
-        {
-          type: "mrkdwn",
-          text: ` Refund amount: \t${new Intl.NumberFormat("en-US", {
-            style: "currency",
-            currency: data.order.currency_code.toUpperCase(),
-          }).format(+(data.refund_amount / 100).toFixed(2))}`,
-        },
-      ],
-    });
-
-    return {
-      message: {
-        text: eventName.toUpperCase(),
-        blocks: [
+        type: "context",
+        elements: [
           {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: `${eventName.toUpperCase()} *<${
-                options.backend_url
-              }/orders/${data.order.id}|#${data.order.display_id}>*`,
-            },
-          },
-          ...blocks,
-          {
-            type: "divider",
+            type: "mrkdwn",
+            text: ` Refund amount: \t${new Intl.NumberFormat("en-US", {
+              style: "currency",
+              currency: returnedData.order.currency_code.toUpperCase(),
+            }).format(+(returnedData.refund_amount / 100).toFixed(2))}`,
           },
         ],
-      },
-      id: data.id,
-    };
+      });
+
+      return {
+        message: {
+          text: eventName.toUpperCase(),
+          blocks: [
+            {
+              type: "section",
+              text: {
+                type: "mrkdwn",
+                text: `${eventName.toUpperCase()} *<${
+                  options.backend_url
+                }/orders/${returnedData.order.id}|#${
+                  returnedData.order.display_id
+                }>*`,
+              },
+            },
+            ...blocks,
+            {
+              type: "divider",
+            },
+          ],
+        },
+        id: returnedData.id,
+      };
   }
 }
