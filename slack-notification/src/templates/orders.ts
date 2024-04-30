@@ -2,6 +2,8 @@ import { Order, OrderService, ReturnService } from "@medusajs/medusa";
 import { MedusaContainer } from "@medusajs/types";
 import { TemplateRes } from "../types";
 import { PluginOptions } from "../services/slack-notification-sender";
+import { KnownBlock } from "@slack/web-api";
+import { Block } from "typescript";
 
 export const EVENTS = [
   OrderService.Events.PLACED,
@@ -9,6 +11,9 @@ export const EVENTS = [
   OrderService.Events.RETURN_REQUESTED,
   OrderService.Events.ITEMS_RETURNED,
   OrderService.Events.RETURN_ACTION_REQUIRED,
+  OrderService.Events.REFUND_CREATED,
+  OrderService.Events.REFUND_FAILED,
+  OrderService.Events.SHIPMENT_CREATED,
 ];
 
 /**
@@ -25,45 +30,52 @@ export interface EventData {
 
 export async function prepareTemplateData(
   eventName: string,
-  { id, no_notification, return_id }: EventData,
+  { id, no_notification, return_id, refund_id, fulfillment_id }: EventData,
   container: MedusaContainer
 ) {
   if (no_notification) {
     return;
   }
+  const orderService = container.resolve<OrderService>("orderService");
+  const returnService = container.resolve<ReturnService>("returnService");
+  const order = await orderService.retrieve(id, {
+    select: [
+      "shipping_total",
+      "discount_total",
+      "tax_total",
+      "subtotal",
+      "total",
+      "refunded_total",
+      "paid_total",
+    ],
+    relations: [
+      "billing_address",
+      "shipping_address",
+      "discounts",
+      "discounts.rule",
+      "shipping_methods",
+      "payments",
+      "items",
+      "fulfillments",
+    ],
+  });
   switch (eventName) {
     case "order.placed":
     case "order.canceled":
-      const orderService = container.resolve<OrderService>("orderService");
-
-      const order = await orderService.retrieve(id, {
-        select: [
-          "shipping_total",
-          "discount_total",
-          "tax_total",
-          "subtotal",
-          "total",
-          "refunded_total",
-          "paid_total",
-        ],
-        relations: [
-          "customer",
-          "billing_address",
-          "shipping_address",
-          "discounts",
-          "discounts.rule",
-          "shipping_methods",
-          "payments",
-          "items",
-          "fulfillments",
-        ],
-      });
       return order;
+    case "order.shipment_created":
+      const fulfillment = order.fulfillments.find(
+        (f) => f.id === fulfillment_id
+      );
+      return { ...order, fulfillment: fulfillment };
+
+    case "order.refund_created":
+    case "order.refund_failed":
+      const refund = order.refunds.find((o) => o.id === refund_id);
+      return { ...order, refund: refund };
     case "order.return_requested":
     case "order.items_returned":
     case "order.return_action_required":
-      const returnService = container.resolve<ReturnService>("returnService");
-
       const returnData = await returnService.retrieve(return_id, {
         relations: [
           "order",
@@ -78,33 +90,6 @@ export async function prepareTemplateData(
       });
       return returnData;
   }
-
-  const orderService = container.resolve<OrderService>("orderService");
-
-  const order = await orderService.retrieve(id, {
-    select: [
-      "shipping_total",
-      "discount_total",
-      "tax_total",
-      "subtotal",
-      "total",
-      "refunded_total",
-      "paid_total",
-    ],
-    relations: [
-      "customer",
-      "billing_address",
-      "shipping_address",
-      "discounts",
-      "discounts.rule",
-      "shipping_methods",
-      "payments",
-      "items",
-      "fulfillments",
-    ],
-  });
-
-  return order;
 }
 
 export default function templateData(
@@ -113,7 +98,137 @@ export default function templateData(
   options: PluginOptions
 ): TemplateRes {
   if ("display_id" in data) {
-    const blocks: any[] = [];
+    if (
+      (eventName === "order.refund_created" ||
+        eventName === "order.refund_failed") &&
+      "refund" in data
+    ) {
+      const blocks: (KnownBlock | Block)[] = [];
+
+      blocks.push({
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: ` Refund amount: \t${new Intl.NumberFormat("en-US", {
+              style: "currency",
+              currency: data.currency_code.toUpperCase(),
+            }).format(+(data.refund.amount / 100).toFixed(2))} \n Reason : \t${
+              data.refund.reason
+            } ${data.refund.note && ` \n Note : \t${data.refund.note}`}`,
+          },
+        ],
+      });
+
+      return {
+        message: {
+          text: eventName.toUpperCase(),
+          blocks: [
+            {
+              type: "section",
+              text: {
+                type: "mrkdwn",
+                text: `${eventName.toUpperCase()} *<${
+                  options.backend_url || "http://localhost:9000/app/a"
+                }/orders/${data.id}|#${data.display_id}>*`,
+              },
+            },
+            ...blocks,
+            {
+              type: "divider",
+            },
+          ],
+        },
+        id: data.id,
+      };
+    } else if (
+      eventName === "order.shipment_created" &&
+      "fulfillment" in data
+    ) {
+      const blocks: (KnownBlock | Block)[] = [];
+
+      const itemIds = data.fulfillment.items.map((item) => item.item_id);
+      data.items.forEach((item) => {
+        if (itemIds.includes(item.id)) {
+          blocks.push({
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `*<${options.backend_url}/products/${
+                item.variant.product_id
+              }|#${item.title}>*\n Description: \t${
+                item.description
+              }\n Quantity: \t${
+                item.quantity
+              } \n Total: \t${new Intl.NumberFormat("en-US", {
+                style: "currency",
+                currency: data.currency_code.toUpperCase(),
+              }).format(+(item.total / 100).toFixed(2))}`,
+            },
+            accessory: {
+              type: "image",
+              image_url: `${item.thumbnail}`,
+              alt_text: "Product image",
+            },
+          });
+        }
+      });
+      return {
+        message: {
+          text: eventName.toUpperCase(),
+          blocks: [
+            {
+              type: "section",
+              text: {
+                type: "mrkdwn",
+                text: `${eventName.toUpperCase()} *<${
+                  options.backend_url || "http://localhost:9000/app/a"
+                }/orders/${data.id}|#${data.display_id}>*`,
+              },
+            },
+            {
+              type: "divider",
+            },
+            ...blocks,
+            {
+              type: "divider",
+            },
+            {
+              type: "context",
+              elements: [
+                {
+                  type: "mrkdwn",
+                  text: `Subotal: \t ${new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: data.currency_code.toUpperCase(),
+                  }).format(
+                    +(data.subtotal / 100).toFixed(2)
+                  )} \n Shipping: \t ${new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: data.currency_code.toUpperCase(),
+                  }).format(
+                    +(data.shipping_total / 100).toFixed(2)
+                  )}\n Discount: \t ${new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: data.currency_code.toUpperCase(),
+                  }).format(
+                    +(data.discount_total / 100).toFixed(2)
+                  )}\n Total: \t ${new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: data.currency_code.toUpperCase(),
+                  }).format(+(data.total / 100).toFixed(2))}`,
+                },
+              ],
+            },
+            {
+              type: "divider",
+            },
+          ],
+        },
+        id: data.id,
+      };
+    }
+    const blocks: (KnownBlock | Block)[] = [];
     data.items.forEach((item) => {
       blocks.push({
         type: "section",
@@ -193,7 +308,7 @@ export default function templateData(
       },
     };
   } else {
-    const blocks: any[] = [];
+    const blocks: (KnownBlock | Block)[] = [];
     data.items.forEach((i) => {
       blocks.push({
         type: "divider",

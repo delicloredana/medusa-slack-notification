@@ -2,6 +2,8 @@ import { ReturnItem, SwapService } from "@medusajs/medusa";
 import { MedusaContainer } from "@medusajs/types";
 import { TemplateRes } from "../types";
 import { PluginOptions } from "../services/slack-notification-sender";
+import {  KnownBlock } from "@slack/web-api";
+import { Block } from "typescript";
 
 export const EVENTS = [SwapService.Events.CREATED];
 
@@ -55,7 +57,7 @@ export default function templateData(
   data: Awaited<ReturnType<typeof prepareTemplateData>>,
   options: PluginOptions
 ): TemplateRes {
-  const blocks: any[] = [];
+  const blocks: (KnownBlock | Block)[] = [];
   blocks.push({
     type: "divider",
   });
