@@ -32,3 +32,5 @@ svg-sprite
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.yalc/

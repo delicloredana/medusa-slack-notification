@@ -19,7 +19,7 @@
     "resolveJsonModule": true,
     "checkJs": false
   },
-  "include": ["src/", "commands", "src/commands/seedReviews.ts"],
+  "include": ["src/"],
   "exclude": [
     "**/__tests__",
     "**/__fixtures__",

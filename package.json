@@ -2,13 +2,12 @@
   "name": "medusa-plugin-slack-notification",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "dev/medusa",
-    "slack-notification"
-  ],
   "scripts": {
-    "start:medusa": "nodemon --watch \"slack-notification\" --ignore \"slack-notification/src\" --ignore \"slack-notification/thunder\" --spawn --exec \"npm start -w medusa\" --delay 2 --verbose",
-    "start": "concurrently -n \"build:slack-notification\" \"npm run build -w medusa-plugin-slack-notification && npm run build -w medusa\"  && concurrently -n \"start:medusa,watch:slack-notification\" \"npm run start:medusa\" \"npm run watch -w medusa-plugin-slack-notification\"  --timings --prefix \"[{name}] [{time}] =>\""
+    "setup": "cd medusa-plugin-slack-notification && npm install && yalc publish && cd ../medusa && yalc add medusa-plugin-slack-notification && npm install &&  cd ..",
+    "start": "cd medusa-plugin-slack-notification && yalc publish && cd .. && npm run sync && cd medusa  && cd .. && concurrently \"npm run watch:medusa-plugin-slack-notification\"  --timings --prefix \"[{index}] [{time}] =>\"",
+    "sync:medusa": "cd medusa-plugin-slack-notification && yalc publish --no-scripts --push",
+    "sync": "npm run sync:medusa",
+    "watch:medusa-plugin-slack-notification": "nodemon -e js,jsx,ts,tsx --watch \"medusa-plugin-slack-notification/src\" --spawn --exec \"cd medusa-plugin-slack-notification && npm run prepare && cd .. && npm run sync:medusa && cd medusa && npm run start\" --delay 1 --verbose"
   },
   "dependencies": {
     "@agilorunner/gitdeploy": "^2.4.0",

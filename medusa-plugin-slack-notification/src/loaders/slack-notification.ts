@@ -37,7 +37,7 @@ export default async (
   const rootDir = path.resolve(".");
   const templatesPath = path.join(
     rootDir,
-    "../../slack-notification/dist/templates"
+    "/node_modules/medusa-plugin-slack-notification/dist/templates"
   );
   await createMap(templatesPath);
   for (const [

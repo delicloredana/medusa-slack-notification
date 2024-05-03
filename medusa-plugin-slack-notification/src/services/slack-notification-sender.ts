@@ -44,7 +44,7 @@ class SlackNotificationService extends AbstractNotificationService {
     const rootDir = path.resolve(".");
     const templatesPath = path.join(
       rootDir,
-      "../../slack-notification/dist/templates"
+      "/node_modules/medusa-plugin-slack-notification/dist/templates"
     );
     const files = await readdir(templatesPath);
     const templatesArray = await Promise.all(
