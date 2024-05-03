@@ -24,3 +24,6 @@ build
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+/docker/postgresql/data
+!/docker/postgresql/.gitkeep
