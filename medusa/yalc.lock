@@ -1,9 +1,0 @@
-{
-  "version": "v1",
-  "packages": {
-    "medusa-plugin-slack-notification": {
-      "signature": "00fcaf03afc19aecc4c0edf450df369d",
-      "file": true
-    }
-  }
-}
