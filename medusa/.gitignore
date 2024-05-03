@@ -27,3 +27,4 @@ build
 
 /docker/postgresql/data
 !/docker/postgresql/.gitkeep
+/yalc.lock
