@@ -6,6 +6,7 @@ import {
   SubscriberConfig,
 } from "@medusajs/medusa";
 import { readdir } from "fs/promises";
+import fs from "fs";
 import path from "path";
 import { ConfigModule, Subscriber } from "@medusajs/types";
 
@@ -35,11 +36,15 @@ export default async (
   notificationService.subscribe("slack-notification", "slack-notification");
 
   const rootDir = path.resolve(".");
-  const templatesPath = path.join(
+
+  const templatesPath = path.join(rootDir, "/dist/templates");
+  const pluginTemplatesPath = path.join(
     rootDir,
     "/node_modules/medusa-plugin-slack-notification/dist/templates"
   );
+
   await createMap(templatesPath);
+  await createMap(pluginTemplatesPath);
   for (const [
     fileName,
     { config, handler },
@@ -82,31 +87,34 @@ export default async (
     }
   }
   async function createMap(dirPath: string) {
-    await Promise.all(
-      await readdir(dirPath, { withFileTypes: true }).then(async (entries) => {
-        return entries
-          .filter((entry) => {
-            if (
-              excludes.length &&
-              excludes.some((exclude) => exclude.test(entry.name))
-            ) {
-              return false;
-            }
+    if (fs.existsSync(dirPath)) {
+      await Promise.all(
+        await readdir(dirPath, { withFileTypes: true }).then(
+          async (entries) => {
+            return entries
+              .filter((entry) => {
+                if (
+                  excludes.length &&
+                  excludes.some((exclude) => exclude.test(entry.name))
+                ) {
+                  return false;
+                }
 
-            return true;
-          })
-          .map(async (entry) => {
-            const fullPath = path.join(dirPath, entry.name);
-            return await createDescriptor(fullPath, entry.name);
-          });
-      })
-    );
+                return true;
+              })
+              .map(async (entry) => {
+                return await createDescriptor(dirPath, entry.name);
+              });
+          }
+        )
+      );
+    }
   }
-  async function createDescriptor(absolutePath: string, entry: string) {
-    const [templateFileName] = entry.split(".");
-    return await import(`${templatesPath}/${templateFileName}`).then(
-      (module) => {
-        subscriberDescriptors.set(absolutePath, {
+  async function createDescriptor(dirPath: string, entry: string) {
+    const [templateFileName, extension] = entry.split(".");
+    return await import(`${dirPath}/${templateFileName}`).then((module) => {
+      !subscriberDescriptors.has(templateFileName) &&
+        subscriberDescriptors.set(templateFileName, {
           config: {
             event: module.EVENTS,
             context: {
@@ -129,7 +137,6 @@ export default async (
             return;
           },
         });
-      }
-    );
+    });
   }
 };

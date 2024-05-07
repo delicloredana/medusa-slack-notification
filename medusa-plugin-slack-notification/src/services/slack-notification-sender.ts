@@ -7,6 +7,7 @@ import { WebClient } from "@slack/web-api";
 import { TemplateRes } from "../types";
 import { readdir } from "fs/promises";
 import path from "path";
+import fs from "fs";
 
 export type PluginOptions = {
   backend_url: string;
@@ -20,6 +21,12 @@ export type SlackNotificationData = {
   id: string;
   preparedData: Record<string, unknown>;
 };
+
+const excludes: RegExp[] = [
+  /\.DS_Store/,
+  /(\.ts\.map|\.js\.map|\.d\.ts)/,
+  /^_[^/\\]*(\.[^/\\]+)?$/,
+];
 
 class SlackNotificationService extends AbstractNotificationService {
   static identifier = "slack-notification";
@@ -42,13 +49,33 @@ class SlackNotificationService extends AbstractNotificationService {
 
   async loadTemplates() {
     const rootDir = path.resolve(".");
-    const templatesPath = path.join(
+    const templatesPath = path.join(rootDir, "/dist/templates");
+    const pluginTemplatesPath = path.join(
       rootDir,
       "/node_modules/medusa-plugin-slack-notification/dist/templates"
     );
-    const files = await readdir(templatesPath);
+    const files = fs.existsSync(templatesPath)
+      ? await readdir(templatesPath)
+      : [];
+    const pluginFiles = await readdir(pluginTemplatesPath);
+    const pluginTemplatesArray = await Promise.all(
+      pluginFiles.map(async (file) => {
+        if (excludes.some((exclude) => exclude.test(file))) {
+          return;
+        }
+        const [fileName] = file.split(".");
+        const templateData = await import(`${pluginTemplatesPath}/${fileName}`);
+
+        return {
+          [fileName]: templateData.default,
+        };
+      })
+    );
     const templatesArray = await Promise.all(
       files.map(async (file) => {
+        if (excludes.some((exclude) => exclude.test(file))) {
+          return;
+        }
         const [fileName] = file.split(".");
         const templateData = await import(`${templatesPath}/${fileName}`);
 
@@ -57,7 +84,9 @@ class SlackNotificationService extends AbstractNotificationService {
         };
       })
     );
-    this.templates = Object.assign({}, ...templatesArray);
+
+    const pluginTemplates = Object.assign({}, ...pluginTemplatesArray);
+    this.templates = Object.assign(pluginTemplates, ...templatesArray);
   }
   async sendNotification(
     event: string,
@@ -66,6 +95,7 @@ class SlackNotificationService extends AbstractNotificationService {
     if (!this.templates) {
       await this.loadTemplates();
     }
+
     const formattedMessage = this.templates[data.templateFileName](
       data.originalEventName,
       data.preparedData,
