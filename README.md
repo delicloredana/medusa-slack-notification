@@ -26,6 +26,8 @@ For a clear example, refer to the plugin in `/dist/templates` folder.
 ### Prerequisites
 
 - [Medusa Backend](https://docs.medusajs.com/development/backend/install)
+- [Slack account](https://slack.com)
+- [Redis](https://docs.medusajs.com/development/backend/prepare-environment#redis)
 
 ## How To Install
 
@@ -38,7 +40,15 @@ npm i medusa-plugin-slack-notification
 medusa migrations run
 ```
 
-2. Add the plugin to your `medusa-config.js` file at the end of the `plugins` array:
+2. Set the following environment variable in `.env` :
+
+```
+SLACK_API=<Bot_User_OAuth_token_in_your_slack_app>
+CHANNEL=<CHANNEL_ID>
+BACKEND_URL=<YOUR_BACKEND_URL>
+```
+
+3. Add the plugin to your `medusa-config.js` file at the end of the `plugins` array:
 
 ```js
 module.exports = {
